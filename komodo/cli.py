@@ -20,7 +20,7 @@ from komodo.package_version import (
 )
 from komodo.shebang import fixup_python_shebangs
 from komodo.shell import pushd, shell
-from komodo.yaml_file_type import YamlFile
+from komodo.yaml_file_type import ReleaseFile, RepositoryFile
 
 
 def create_enable_scripts(komodo_prefix: str, komodo_release: str) -> None:
@@ -261,13 +261,13 @@ def parse_args(args: List[str]) -> argparse.Namespace:
 
     parser.add_argument(
         "pkgs",
-        type=YamlFile(),
+        type=ReleaseFile(),
         help="A Komodo release file mapping package name to version, "
         "in YAML format.",
     )
     parser.add_argument(
         "repo",
-        type=YamlFile(),
+        type=RepositoryFile(),
         help="A Komodo repository file, in YAML format.",
     )
 

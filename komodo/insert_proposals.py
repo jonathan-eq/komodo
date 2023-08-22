@@ -6,10 +6,14 @@ from base64 import b64decode
 from datetime import datetime
 
 import github
-import ruamel.yaml
 from github import Github, UnknownObjectException
 
 from komodo.prettier import write_to_string
+from komodo.yaml_file_type import (
+    ReleaseFileYamlString,
+    RepositoryFileYamlString,
+    UpgradeProposalsYamlString,
+)
 
 
 def recursive_update(left, right):
@@ -46,31 +50,22 @@ def diff_file_and_string(file_contents, string, leftname, rightname):
     )
 
 
-def load_yaml_from_repo(filename, repo, ref):
-    ruamel_instance = ruamel.yaml.YAML()
-    ruamel_instance.indent(  # Komodo prefers two space indendation
-        mapping=2, sequence=4, offset=2
-    )
-    ruamel_instance.width = 1000  # Avoid ruamel wrapping long
-
-    try:
-        sym_conf_content = repo.get_contents(filename, ref=ref)
-
-        input_dict = ruamel_instance.load(b64decode(sym_conf_content.content))
-        return input_dict
-
-    except (
-        ruamel.yaml.scanner.ScannerError,
-        ruamel.yaml.constructor.DuplicateKeyError,
-    ) as e:
-        raise SystemExit(f"The file: <{filename}> contains invalid YAML syntax:\n {e}")
+def load_yaml_from_repo(filename, repo, ref) -> bytes:
+    sym_conf_content = repo.get_contents(filename, ref=ref)
+    input_dict = b64decode(sym_conf_content.content)
+    return input_dict
 
 
 def main():
     args = parse_args()
     repo = _get_repo(os.getenv("GITHUB_TOKEN"), args.git_fork, args.git_repo)
     insert_proposals(
-        repo, args.base, args.target, args.git_ref, args.jobname, args.joburl
+        repo,
+        args.base,
+        args.target,
+        args.git_ref,
+        args.jobname,
+        args.joburl,
     )
 
 
@@ -95,17 +90,31 @@ def insert_proposals(repo, base, target, git_ref, jobname, joburl) -> None:
         raise ValueError(f"Branch {tmp_target} exists already")
 
     # create contents of new release
-    proposal_yaml = load_yaml_from_repo("upgrade_proposals.yml", repo, git_ref)
+    proposal_yaml = UpgradeProposalsYamlString.convert(
+        value=load_yaml_from_repo("upgrade_proposals.yml", repo, git_ref)
+    )
     upgrade_key = f"{year}-{month}"
     upgrade = proposal_yaml.get(upgrade_key)
-    if upgrade_key not in proposal_yaml:
-        raise ValueError(
-            f"No section for this release ({upgrade_key}) in upgrade_proposals.yml"
-        )
+    assert (
+        upgrade_key in proposal_yaml
+    ), f"No section for this release ({upgrade_key}) in upgrade_proposals.yml"
+
     base_file = f"releases/matrices/{base}.yml"
     target_file = f"releases/matrices/{target}.yml"
-    base_dict = load_yaml_from_repo(base_file, repo, git_ref)
+    repofile = RepositoryFileYamlString.convert(
+        value=load_yaml_from_repo("repository.yml", repo, git_ref)
+    )
+    base_dict = ReleaseFileYamlString.convert(
+        value=load_yaml_from_repo(base_file, repo, git_ref)
+    )
     if upgrade:
+        for package_name, package_version in upgrade.items():
+            assert (
+                package_name in repofile
+            ), f"Package '{package_name}' was not found in repository file"
+            assert package_version in repofile.get(
+                package_name
+            ), f"Version '{package_version}' for package '{package_name}' was not found in repository file"
         recursive_update(base_dict, upgrade)
     result = write_to_string(base_dict)
 

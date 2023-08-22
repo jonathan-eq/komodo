@@ -7,6 +7,19 @@ import yaml
 
 from komodo.insert_proposals import insert_proposals
 
+VALID_REPOSITORY_CONTENT = {
+    "addlib": {
+        "1.1.3": {"source": "pypi", "make": "pip", "maintainer": "scout"},
+        "1.1.2": {"source": "pypi", "make": "pip", "maintainer": "scout"},
+        "1.1.1": {"source": "pypi", "make": "pip", "maintainer": "scout"},
+    },
+    "testlib2": {
+        "3.7": {"source": "pypi", "make": "pip", "maintainer": "scout"},
+        "1.1.2": {"source": "pypi", "make": "pip", "maintainer": "scout"},
+        "1.1.1": {"source": "pypi", "make": "pip", "maintainer": "scout"},
+    },
+}
+
 
 class MockContent(object):
     def __init__(self, dicty):
@@ -61,7 +74,7 @@ class MockRepo(object):
 
 
 @pytest.mark.parametrize(
-    "base, target, repo_files, changed_files, prs, return_type",
+    "base, target, repo_files, changed_files, prs, return_type, error_message",
     [
         pytest.param(
             "1111.11.rc1",
@@ -75,6 +88,7 @@ class MockRepo(object):
                     "1111-11": None,
                     "1111-12": {"testlib2": "ignore"},
                 },
+                "repository.yml": VALID_REPOSITORY_CONTENT,
             },
             {
                 "releases/matrices/1111.11.rc2.yml": {
@@ -88,6 +102,7 @@ class MockRepo(object):
             },
             ["Temporary PR 1111.11.rc2", "Add release 1111.11.rc2"],
             type(None),
+            "",
             id="empty_upgrade_proposal",
         ),
         pytest.param(
@@ -102,6 +117,7 @@ class MockRepo(object):
                     "1111-11": {"testlib2": "1.1.2", "addlib": "1.1.3"},
                     "1111-12": {"testlib2": "ignore"},
                 },
+                "repository.yml": VALID_REPOSITORY_CONTENT,
             },
             {
                 "releases/matrices/1111.11.rc2.yml": {
@@ -116,23 +132,26 @@ class MockRepo(object):
             },
             ["Temporary PR 1111.11.rc2", "Add release 1111.11.rc2"],
             type(None),
+            "",
             id="with_upgrade_proposal",
         ),
         pytest.param(
             "1111.11.rc1",
-            "1111.11.rc2",
+            "1111.12.rc2",
             {
                 "releases/matrices/1111.11.rc1.yml": {
                     "testlib1": "1.1.1",
                     "testlib2": "1.1.1",
                 },
                 "upgrade_proposals.yml": {
-                    "1111-12": {"testlib2": "ignore"},
+                    "1111-11": {"testlib2": "1.1.2"},
                 },
+                "repository.yml": VALID_REPOSITORY_CONTENT,
             },
             {},
             [],
-            ValueError,
+            AssertionError,
+            r"No section for this release \(1111-12\) in upgrade_proposals\.yml",
             id="missing_proposal_heading",
         ),
         pytest.param(
@@ -142,16 +161,116 @@ class MockRepo(object):
             {},
             [],
             ValueError,
+            "Branch 2222.22.rc2 exists already",
             id="branch_already_exists",
+        ),
+        pytest.param(
+            "1111.11.rc1",
+            "1111.12.rc1",
+            {
+                "releases/matrices/1111.11.rc1.yml": {
+                    "testlib1": "1.1.1",
+                    "testlib2": "1.1.1",
+                },
+                "upgrade_proposals.yml": {
+                    "1111-11": None,
+                    "1111-12": {"addlib": "1.1.4"},
+                },
+                "repository.yml": VALID_REPOSITORY_CONTENT,
+            },
+            {},
+            [],
+            AssertionError,
+            "Version '1.1.4' for package 'addlib' was not found in repository file",
+            id="upgrade_proposal_new_version_not_present_in_repository",
+        ),
+        pytest.param(
+            "1111.11.rc1",
+            "1111.12.rc1",
+            {
+                "releases/matrices/1111.11.rc1.yml": {
+                    "testlib1": "1.1.1",
+                    "testlib2": "1.1.1",
+                },
+                "upgrade_proposals.yml": {
+                    "1111-11": None,
+                    "1111-12": {"package_does_not_exist": "1.1.4"},
+                },
+                "repository.yml": VALID_REPOSITORY_CONTENT,
+            },
+            {},
+            [],
+            AssertionError,
+            "Package 'package_does_not_exist' was not found in repository file",
+            id="upgrade_proposal_new_package_not_present_in_repository",
+        ),
+        pytest.param(
+            "1111.11.rc1",
+            "1111.12.rc1",
+            {
+                "releases/matrices/1111.11.rc1.yml": {
+                    "testlib1": "1.1.1",
+                    "testlib2": "1.1.1",
+                },
+                "upgrade_proposals.yml": {
+                    "1111-11": None,
+                    "1111-12": {"testlib2": 3.7},
+                },
+                "repository.yml": VALID_REPOSITORY_CONTENT,
+            },
+            {},
+            [],
+            AssertionError,
+            r"Package version of 'testlib2' has to be of type string",
+            id="float_version_number_in_proposal",
+        ),
+        pytest.param(
+            "1111.11.rc1",
+            "1111.12.rc1",
+            {
+                "releases/matrices/1111.11.rc1.yml": {
+                    "testlib1": "1.1.1",
+                    "testlib2": "1.1.1",
+                },
+                "upgrade_proposals.yml": {
+                    "1111-11": None,
+                    "1111-12": {"addlib": "1.1.2"},
+                },
+                "repository.yml": {
+                    "addlib": {
+                        3.7: {"source": "pypi", "make": "pip", "maintainer": "scout"},
+                        "1.1.2": {
+                            "source": "pypi",
+                            "make": "pip",
+                            "maintainer": "scout",
+                        },
+                        "1.1.1": {
+                            "source": "pypi",
+                            "make": "pip",
+                            "maintainer": "scout",
+                        },
+                    },
+                },
+            },
+            {},
+            [],
+            AssertionError,
+            r"Package version of 'addlib' has to be of type string",
+            id="float_version_number_in_repository",
         ),
     ],
 )
-def test_insert_proposals(base, target, repo_files, changed_files, prs, return_type):
+def test_insert_proposals(
+    base, target, repo_files, changed_files, prs, return_type, error_message
+):
     repo = MockRepo(files=repo_files)
 
     if isinstance(return_type(), Exception):
-        with pytest.raises(return_type):
+        with pytest.raises(return_type, match=error_message):
             insert_proposals(repo, base, target, "git_ref", "jobname", "joburl")
+            # except Exception as e:
+            #    assert str(e) == error_message
+            #    raise e
     else:
         insert_proposals(repo, base, target, "git_ref", "jobname", "joburl")
 

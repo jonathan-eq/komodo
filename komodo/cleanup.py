@@ -1,35 +1,35 @@
 #!/usr/bin/env python
 
-import yaml as yml
+from typing import List
+
+from komodo.yaml_file_type import ReleaseFileYamlString, RepositoryFileYamlString
 
 
-def cleanup(repofile, releasefiles):
-    with open(repofile, "r", encoding="utf-8") as r:
-        repo = yml.safe_load(r)
-    rels = []
-    for fname in releasefiles:
-        with open(fname, "r", encoding="utf-8") as f:
-            rels.append(yml.safe_load(f))
+def cleanup(repository_file: str, release_files: List[str]):
+    with open(repository_file, "r", encoding="utf-8") as r:
+        repository_file_yaml_string = r.read()
+    repository = RepositoryFileYamlString.convert(repository_file_yaml_string)
 
-    if not isinstance(repo, dict):
-        raise ValueError(f"Malformed package file: {type(repo)}")
-    for rel in rels:
-        if not isinstance(rel, dict):
-            raise ValueError(f"Malformed repository file: {type(rel)}")
+    releases = []
+    for file_name in release_files:
+        with open(file_name, "r", encoding="utf-8") as f:
+            release_file_yaml_string = f.read()
+        release = ReleaseFileYamlString.convert(release_file_yaml_string)
+        releases.append(release)
 
-    registered_versions = []
-    for pkg in repo:
-        for v in repo[pkg]:
-            registered_versions.append((pkg, v))
+    registered_package_version_combinations = []
+    for package in repository:
+        for version in repository[package]:
+            registered_package_version_combinations.append((package, version))
 
-    seen_versions = set()
-    for rel in rels:
-        for pkg in rel:
-            seen_versions.add((pkg, rel[pkg]))
+    seen_package_version_combinations = set()
+    for release in releases:
+        for package in release:
+            seen_package_version_combinations.add((package, release[package]))
 
     seen_all = True
-    for ver in registered_versions:
-        if ver not in seen_versions:
+    for ver in registered_package_version_combinations:
+        if ver not in seen_package_version_combinations:
             if seen_all:
                 print("unused:")
                 seen_all = False
@@ -42,8 +42,8 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 3:
-        exit("usage: komodo.cleanup repo.yml rel1.yml rel2.yml ... reln.yml")
+        exit("usage: komodo.cleanup repository.yml rel1.yml rel2.yml ... reln.yml")
 
-    repo = sys.argv[1]
+    repository = sys.argv[1]
     releases = sys.argv[2:]
-    cleanup(repo, releases)
+    cleanup(repository, releases)

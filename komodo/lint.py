@@ -9,6 +9,8 @@ from collections import namedtuple
 import yaml as yml
 from pkg_resources import PkgResourcesDeprecationWarning, parse_version
 
+from komodo.yaml_file_type import ReleaseFile, RepositoryFile
+
 kerr = namedtuple("KomodoError", ["pkg", "version", "maintainer", "depends", "err"])
 
 report = namedtuple(
@@ -159,13 +161,13 @@ def get_args():
     )
     parser.add_argument(
         "pkgfile",
-        type=str,
+        type=ReleaseFile(),
         help="A Komodo release file mapping package name to version, "
         "in YAML format.",
     )
     parser.add_argument(
         "repofile",
-        type=str,
+        type=RepositoryFile(),
         help="A Komodo repository file, in YAML format.",
     )
     parser.add_argument(
